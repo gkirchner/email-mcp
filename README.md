@@ -8,7 +8,7 @@
 
 An MCP (Model Context Protocol) server providing comprehensive email capabilities via IMAP and SMTP.
 
-Enables AI assistants to read, search, send, manage, schedule, and analyze emails across multiple accounts. Exposes 42 tools, 7 prompts, and 6 resources over the MCP protocol with OAuth2 support _(experimental)_, email scheduling, calendar extraction, analytics, provider-aware label management, real-time IMAP IDLE watcher with AI-powered triage, customizable presets and static rules, and a guided setup wizard.
+Enables AI assistants to read, search, send, manage, schedule, and analyze emails across multiple accounts. Exposes 47 tools, 7 prompts, and 6 resources over the MCP protocol with OAuth2 support _(experimental)_, email scheduling, calendar extraction, analytics, provider-aware label management, real-time IMAP IDLE watcher with AI-powered triage, customizable presets and static rules, and a guided setup wizard.
 
 ## Highlights
 
@@ -74,6 +74,35 @@ npm install -g @codefuturist/email-mcp
 pnpm add -g @codefuturist/email-mcp
 ```
 
+### Docker
+
+No Node.js required — just Docker.
+
+```bash
+# Latest stable release
+docker pull ghcr.io/codefuturist/email-mcp:latest
+
+# Pin to an exact version (immutable)
+docker pull ghcr.io/codefuturist/email-mcp:0.2.3
+
+# Auto-update patches within a minor version
+docker pull ghcr.io/codefuturist/email-mcp:0.2
+
+# Track a major version (won't cross breaking-change boundary)
+docker pull ghcr.io/codefuturist/email-mcp:0
+
+# Pin to an exact git commit (immutable, CI traceability)
+docker pull ghcr.io/codefuturist/email-mcp:sha-abc1234
+
+# Or build from source
+docker build -t ghcr.io/codefuturist/email-mcp .
+```
+
+> **Tag convention:** Tags follow bare semver (no `v` prefix), matching Docker ecosystem standards (e.g. `node:24`, `nginx:1.25`). The `latest` tag is only updated on stable releases, never pre-releases.
+
+> **Note:** The server uses stdio transport. Config must be created on the host first
+> (via `npx @codefuturist/email-mcp setup` or manually) and mounted into the container.
+
 ## Usage
 
 ### Setup
@@ -128,7 +157,12 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) o
 <details>
 <summary><strong>VS Code (GitHub Copilot)</strong></summary>
 
-Add to `.vscode/mcp.json` in your workspace, or User `settings.json` under the `mcp` key:
+**Option 1 — Extensions gallery (easiest):**
+1. Open the Extensions view (<kbd>⇧⌘X</kbd> / <kbd>Ctrl+Shift+X</kbd>)
+2. Search `@mcp email-mcp`
+3. Click **Install** (user-wide) or right-click → **Install in Workspace**
+
+**Option 2 — Workspace config** (`.vscode/mcp.json`, committed to source control):
 
 ```json
 {
@@ -137,6 +171,24 @@ Add to `.vscode/mcp.json` in your workspace, or User `settings.json` under the `
       "type": "stdio",
       "command": "npx",
       "args": ["-y", "@codefuturist/email-mcp", "stdio"]
+    }
+  }
+}
+```
+
+**Option 3 — User config** (`settings.json`, applies to all workspaces):
+
+Open the Command Palette → **Preferences: Open User Settings (JSON)** and add:
+
+```json
+{
+  "mcp": {
+    "servers": {
+      "email": {
+        "type": "stdio",
+        "command": "npx",
+        "args": ["-y", "@codefuturist/email-mcp", "stdio"]
+      }
     }
   }
 }
@@ -171,6 +223,82 @@ Edit `~/.codeium/windsurf/mcp_config.json`:
     "email": {
       "command": "npx",
       "args": ["-y", "@codefuturist/email-mcp", "stdio"]
+    }
+  }
+}
+```
+</details>
+
+<details>
+<summary><strong>Zed</strong></summary>
+
+Edit `~/.config/zed/settings.json`:
+
+```json
+{
+  "context_servers": {
+    "email": {
+      "command": {
+        "path": "npx",
+        "args": ["-y", "@codefuturist/email-mcp", "stdio"]
+      }
+    }
+  }
+}
+```
+</details>
+
+<details>
+<summary><strong>Mistral Vibe</strong></summary>
+
+Add to `~/.vibe/config.toml`:
+
+```toml
+[[mcp_servers]]
+name = "email-mcp"
+transport = "stdio"
+command = "npx"
+args = ["-y", "@codefuturist/email-mcp", "stdio"]
+```
+
+To pass credentials directly instead of using a config file, use the `env` field:
+
+```toml
+[[mcp_servers]]
+name = "email-mcp"
+transport = "stdio"
+command = "npx"
+args = ["-y", "@codefuturist/email-mcp", "stdio"]
+env = { "EMAIL_ACCOUNTS" = "<your-accounts-json>" }
+```
+
+MCP tools are exposed as `email-mcp_<tool_name>` (e.g. `email-mcp_list_emails`). Restart Vibe after editing the config.
+
+</details>
+
+<details>
+<summary><strong>Docker (any MCP client)</strong></summary>
+
+Run the server in a container — mount your config directory read-only:
+
+```bash
+docker run --rm -i \
+  -v ~/.config/email-mcp:/home/node/.config/email-mcp:ro \
+  ghcr.io/codefuturist/email-mcp
+```
+
+For MCP client configuration (e.g. Claude Desktop):
+
+```json
+{
+  "mcpServers": {
+    "email": {
+      "command": "docker",
+      "args": [
+        "run", "--rm", "-i",
+        "-v", "~/.config/email-mcp:/home/node/.config/email-mcp:ro",
+        "ghcr.io/codefuturist/email-mcp"
+      ]
     }
   }
 }
@@ -318,11 +446,36 @@ For single-account setups (overrides config file):
 
 The scheduler enables future email delivery with a layered architecture:
 
-1. **MCP auto-check** — Processes the queue on server startup and every 60 seconds
+1. **MCP auto-check** — Processes the queue on server startup and every 60 seconds while the MCP server is running
 2. **CLI** — `email-mcp scheduler check` for manual or cron-based processing
-3. **OS-level** — `email-mcp scheduler install` sets up launchd (macOS) or crontab (Linux)
+3. **OS-level daemon** — `email-mcp scheduler install` sets up launchd (macOS) or crontab (Linux) to run every minute, independently of the MCP server
 
-Scheduled emails are stored as JSON files in `~/.local/state/email-mcp/scheduled/` with status-based locking and up to 3 retry attempts.
+> **Important — the daemon must be installed for reliable delivery.**
+> Without it, scheduled emails only fire while an AI client is actively connected.
+> Your machine also needs to be running at the scheduled time; if it's asleep or
+> off, the daemon will process overdue emails on next wake/startup. Failed sends
+> are retried up to **3 times** before being marked `failed`.
+
+#### Setting up the daemon
+
+```bash
+# Install (macOS launchd / Linux crontab — runs every minute)
+email-mcp scheduler install
+
+# Verify it's running
+email-mcp scheduler status
+
+# View pending / sent / failed scheduled emails
+email-mcp scheduler list
+
+# Trigger a manual check immediately
+email-mcp scheduler check
+
+# Remove the daemon
+email-mcp scheduler uninstall
+```
+
+Scheduled emails are stored as JSON files in `~/.local/state/email-mcp/scheduled/` with status-based locking. Each entry tracks attempts (max 3) and the last error, so you can inspect failures with `scheduler list`.
 
 ### Real-time Watcher & AI Hooks
 
@@ -489,9 +642,9 @@ Features:
 
 ## API
 
-### Tools (37)
+### Tools (47)
 
-#### Read (13)
+#### Read (14)
 
 | Tool | Description |
 |------|-------------|
@@ -499,13 +652,14 @@ Features:
 | `list_mailboxes` | List folders with unread counts and special-use flags |
 | `list_emails` | Paginated email listing with date, sender, subject, and flag filters |
 | `get_email` | Read full email content with attachment metadata |
+| `get_emails` | Fetch full content of multiple emails in a single call (max 20) |
+| `get_email_status` | Get read/flag/label state of an email without fetching the body |
 | `search_emails` | Search by keyword across subject, sender, and body |
 | `download_attachment` | Download an email attachment by filename |
 | `find_email_folder` | Discover the real folder(s) an email resides in (resolves virtual folders) |
 | `extract_contacts` | Extract unique contacts from recent email headers |
 | `get_thread` | Reconstruct a conversation thread via References/In-Reply-To |
 | `list_templates` | List available email templates |
-| `extract_calendar` | Extract ICS/iCalendar events from an email |
 | `get_email_stats` | Email analytics — volume, top senders, daily trends |
 | `check_health` | Connection health, latency, quota, and IMAP capabilities |
 
@@ -545,13 +699,27 @@ Features:
 | `create_label` | Create a new label |
 | `delete_label` | Delete a label |
 
-#### Watcher & Hooks (3)
+#### Watcher & Alerts (6)
 
 | Tool | Description |
 |------|-------------|
 | `get_watcher_status` | Show IMAP IDLE connections, folders being monitored, and last-seen UIDs |
 | `list_presets` | List available AI triage presets with descriptions and suggested labels |
 | `get_hooks_config` | Show current hooks configuration — preset, rules, and custom instructions |
+| `configure_alerts` | Update alert/notification settings at runtime |
+| `check_notification_setup` | Diagnose desktop notification support and provide setup instructions |
+| `test_notification` | Send a test notification to verify OS permissions are configured |
+
+#### Calendar & Reminders (6)
+
+| Tool | Description |
+|------|-------------|
+| `extract_calendar` | Extract ICS/iCalendar events from an email |
+| `analyze_email_for_scheduling` | Analyze an email to detect events and reminder-worthy content |
+| `add_to_calendar` | Add an email event to the local calendar (macOS/Linux) |
+| `create_reminder` | Create a reminder in macOS Reminders.app from an email |
+| `list_calendars` | List all available local calendars |
+| `check_calendar_permissions` | Check whether the local calendar is accessible |
 
 ### Prompts (7)
 

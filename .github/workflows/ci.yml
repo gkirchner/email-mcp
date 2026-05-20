@@ -5,6 +5,7 @@ on:
     branches: [main, develop]
   pull_request:
     branches: [main, develop]
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -12,30 +13,10 @@ concurrency:
 
 jobs:
   ci:
-    name: Lint · Typecheck · Build
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      # v6 reads the pnpm version from package.json `packageManager`.
-      # v4 errored on the dual specification once pnpm/action-setup got
-      # stricter (`ERR_PNPM_BAD_PM_VERSION`), breaking CI since Feb 2026.
-      - uses: pnpm/action-setup@v6
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Typecheck
-        run: pnpm typecheck
-
-      - name: Lint & format
-        run: pnpm check
-
-      - name: Build
-        run: pnpm build
+    uses: codefuturist/shared-workflows/.github/workflows/ci-node.yml@v1
+    with:
+      node-version: "24"
+      run-integration: true
+      integration-artifact-pattern: "reports/integration-*"
+      docker-smoke-test: true
+      docker-image: "codefuturist/email-mcp:ci"

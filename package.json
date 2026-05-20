@@ -1,6 +1,6 @@
 {
   "name": "@codefuturist/email-mcp",
-  "version": "0.1.0",
+  "version": "0.2.3",
   "mcpName": "io.github.codefuturist/email-mcp",
   "description": "Email MCP server with IMAP + SMTP support",
   "type": "module",
@@ -14,14 +14,20 @@
   ],
   "scripts": {
     "dev": "tsx watch src/main.ts",
-    "build": "tsc",
+    "build": "tsc -p tsconfig.build.json",
     "start": "node dist/main.js",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
     "format": "biome format --write src/",
     "format:check": "biome check src/",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:integration": "vitest run --config vitest.config.integration.ts",
+    "test:all": "vitest run && vitest run --config vitest.config.integration.ts",
     "check": "biome check src/ && eslint src/",
+    "report": "mkdir -p reports && biome check src/ --reporter=json > reports/biome.json 2>&1; eslint src/ -f json -o reports/eslint.json; actionlint -format '{{json .}}' > reports/actionlint.json 2>&1; pnpm test",
     "commit": "cog commit",
     "changelog": "cog changelog",
     "version:check": "cog check",
@@ -29,7 +35,18 @@
     "version:bump:minor": "cog bump --minor",
     "version:bump:patch": "cog bump --patch",
     "version:log": "cog log",
-    "prepublishOnly": "tsc"
+    "prepare": "lefthook install || true",
+    "hooks:install": "lefthook install --force",
+    "hooks:uninstall": "lefthook uninstall",
+    "docker:build": "docker build -t codefuturist/email-mcp .",
+    "docker:run": "docker run --rm -i -v ~/.config/email-mcp:/home/node/.config/email-mcp:ro codefuturist/email-mcp",
+    "docker:compose": "docker compose up",
+    "docker:clean": "docker images --format '{{.Repository}}:{{.Tag}}' | grep email-mcp | xargs docker rmi -f 2>/dev/null; true",
+    "docker:prune": "docker image prune -f && docker buildx prune -f",
+    "release:check": "goreleaser check",
+    "release:snapshot": "goreleaser release --snapshot --clean && pnpm docker:clean",
+    "release:dry-run": "goreleaser release --skip=publish --clean && pnpm docker:clean",
+    "prepublishOnly": "tsc -p tsconfig.build.json"
   },
   "keywords": [
     "email",
@@ -67,18 +84,22 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.4.2",
     "@eslint/compat": "^2.0.2",
     "@eslint/js": "^9.39.2",
     "@types/node": "^25.2.3",
     "@types/nodemailer": "^7.0.10",
+    "@vitest/coverage-v8": "^4.0.18",
     "eslint": "^9.39.2",
-    "@biomejs/biome": "^2.4.0",
     "eslint-config-airbnb-extended": "^3.0.1",
+    "lefthook": "^2.1.1",
+    "testcontainers": "^11.12.0",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
   },
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=24.0.0"
   },
   "packageManager": "pnpm@9.15.0"
 }
