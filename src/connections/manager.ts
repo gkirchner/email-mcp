@@ -68,7 +68,7 @@ export default class ConnectionManager implements IConnectionManager {
         ]);
         return existing;
       } catch {
-        await mcpLog('warn', 'imap', `Stale connection for "${accountName}", reconnecting`);
+        await mcpLog('warning', 'imap', `Stale connection for "${accountName}", reconnecting`);
         this.imapClients.delete(accountName);
         try { existing.close(); } catch { /* ignore */ }
       }
