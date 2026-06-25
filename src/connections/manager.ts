@@ -11,7 +11,6 @@ import { ImapFlow } from 'imapflow';
 import type { Transporter } from 'nodemailer';
 import nodemailer from 'nodemailer';
 import { mcpLog } from '../logging.js';
-
 import type OAuthService from '../services/oauth.service.js';
 import type { AccountConfig } from '../types/index.js';
 import type { IConnectionManager } from './types.js';
@@ -22,11 +21,8 @@ type SmtpAuth =
 
 export default class ConnectionManager implements IConnectionManager {
   private imapClients = new Map<string, ImapFlow>();
-
   private smtpTransports = new Map<string, Transporter>();
-
   private accounts = new Map<string, AccountConfig>();
-
   private oauthService?: OAuthService;
 
   constructor(accounts: AccountConfig[], oauthService?: OAuthService) {
@@ -61,17 +57,27 @@ export default class ConnectionManager implements IConnectionManager {
   async getImapClient(accountName: string): Promise<ImapFlow> {
     const existing = this.imapClients.get(accountName);
     if (existing?.usable) {
-      return existing;
+      // .usable can stay true even when the server has closed the connection
+      // silently. Validate with a NOOP; if it times out or errors, reconnect.
+      try {
+        await Promise.race([
+          existing.noop(),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('NOOP timeout')), 5000)
+          ),
+        ]);
+        return existing;
+      } catch {
+        await mcpLog('warn', 'imap', `Stale connection for "${accountName}", reconnecting`);
+        this.imapClients.delete(accountName);
+        try { existing.close(); } catch { /* ignore */ }
+      }
     }
 
-    // Clean up stale connection
+    // Clean up non-usable stale connection
     if (existing) {
       this.imapClients.delete(accountName);
-      try {
-        existing.close();
-      } catch {
-        /* ignore */
-      }
+      try { existing.close(); } catch { /* ignore */ }
     }
 
     const account = this.getAccount(accountName);
@@ -94,6 +100,11 @@ export default class ConnectionManager implements IConnectionManager {
       },
       auth,
       logger: false,
+    });
+
+    // Remove from cache on connection error so the next call reconnects cleanly
+    client.on('error', () => {
+      this.imapClients.delete(accountName);
     });
 
     await client.connect();
@@ -224,10 +235,11 @@ export default class ConnectionManager implements IConnectionManager {
         auth,
         logger: false,
       });
-      await client.connect();
 
+      await client.connect();
       const mailboxes = await client.list();
       let messageCount = 0;
+
       try {
         const inbox = await client.status('INBOX', {
           messages: true,
@@ -288,6 +300,7 @@ export default class ConnectionManager implements IConnectionManager {
       transport = nodemailer.createTransport(
         ConnectionManager.buildSmtpTransportOptions(account, auth),
       );
+
       await transport.verify();
       return { success: true };
     } catch (err) {
