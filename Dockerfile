@@ -39,7 +39,10 @@ RUN mkdir -p /home/node/.config/email-mcp && chown -R node:node /home/node/.conf
 
 ENV NODE_ENV=production
 
+COPY --chown=node:node entrypoint.sh /home/node/entrypoint.sh
+RUN chmod +x /home/node/entrypoint.sh
+
 USER node
 
-ENTRYPOINT ["node", "dist/main.js"]
-CMD ["stdio"]
+ENTRYPOINT ["/home/node/entrypoint.sh"]
+CMD ["http"]
