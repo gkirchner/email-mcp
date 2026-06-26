@@ -21,8 +21,11 @@ type SmtpAuth =
 
 export default class ConnectionManager implements IConnectionManager {
   private imapClients = new Map<string, ImapFlow>();
+
   private smtpTransports = new Map<string, Transporter>();
+
   private accounts = new Map<string, AccountConfig>();
+
   private oauthService?: OAuthService;
 
   constructor(accounts: AccountConfig[], oauthService?: OAuthService) {
@@ -62,22 +65,28 @@ export default class ConnectionManager implements IConnectionManager {
       try {
         await Promise.race([
           existing.noop(),
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error('NOOP timeout')), 5000)
-          ),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('NOOP timeout')), 5000),),
         ]);
         return existing;
       } catch {
         await mcpLog('warning', 'imap', `Stale connection for "${accountName}", reconnecting`);
         this.imapClients.delete(accountName);
-        try { existing.close(); } catch { /* ignore */ }
+        try {
+          existing.close();
+        } catch {
+          /* ignore */
+        }
       }
     }
 
     // Clean up non-usable stale connection
     if (existing) {
       this.imapClients.delete(accountName);
-      try { existing.close(); } catch { /* ignore */ }
+      try {
+        existing.close();
+      } catch {
+        /* ignore */
+      }
     }
 
     const account = this.getAccount(accountName);
