@@ -24,6 +24,7 @@ import ConnectionManager from './connections/manager.js';
 import { bindServer, markInitialized, mcpLog } from './logging.js';
 import registerAllPrompts from './prompts/register.js';
 import registerAllResources from './resources/register.js';
+import { expectedAuthToken, isAuthorized } from './safety/http-auth.js';
 import RateLimiter from './safety/rate-limiter.js';
 import createServer, { PKG_VERSION } from './server.js';
 import CalendarService from './services/calendar.service.js';
@@ -195,6 +196,7 @@ async function readBody(req: IncomingMessage): Promise<Buffer> {
 
 async function runHttpServer(port: number): Promise<void> {
   const config = await loadConfig();
+  const authToken = expectedAuthToken();
 
   // Shared services — created once for the process lifetime
   const oauthService = new OAuthService();
@@ -246,6 +248,21 @@ async function runHttpServer(port: number): Promise<void> {
     if (req.url !== '/mcp') {
       res.writeHead(404);
       res.end('Not Found');
+      return;
+    }
+
+    if (!isAuthorized(req.headers.authorization, authToken)) {
+      res.writeHead(401, {
+        'Content-Type': 'application/json',
+        'WWW-Authenticate': 'Bearer realm="email-mcp"',
+      });
+      res.end(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          error: { code: -32001, message: 'Unauthorized' },
+          id: null,
+        }),
+      );
       return;
     }
 
@@ -353,6 +370,12 @@ async function runHttpServer(port: number): Promise<void> {
       process.stderr.write(`email-mcp HTTP server listening on :${port}\n`);
       process.stderr.write(`  Endpoint : http://0.0.0.0:${port}/mcp\n`);
       process.stderr.write(`  Health   : http://0.0.0.0:${port}/health\n`);
+      process.stderr.write(
+        authToken === undefined
+          ? '  Auth     : DISABLED — /mcp is open to anyone who can reach this port.\n' +
+              '             Set MCP_AUTH_TOKEN to require an Authorization: Bearer header.\n'
+          : '  Auth     : Bearer token required (MCP_AUTH_TOKEN)\n',
+      );
       resolve();
     });
     httpServer.once('error', reject);
